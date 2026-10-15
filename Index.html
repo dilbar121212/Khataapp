@@ -110,7 +110,10 @@
     }
 
     @media print {
-/* ... existing code ... -->
+      body { background: white !important; color: black !important; }
+      .glass-card { box-shadow: none !important; backdrop-filter: none !important; }
+      .no-print, aside, nav, header, button { display: none !important; }
+      #printableArea { display: block !important; }
       .no-print {
         display: none !important;
       }
@@ -830,6 +833,7 @@
           </div>
         </div>
 
+        <div class="hidden"><input id="tx-note" type="text" /></div>
         <!-- Submit Button -->
         <div class="pt-2 flex items-center gap-3">
           <button type="button" onclick="closeTransactionModal()" class="w-1/3 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs sm:text-sm font-semibold transition">
@@ -958,160 +962,275 @@
 
   <!-- ======================= APPLICATION JAVASCRIPT ======================= -->
   <script>
-    /********************************************************************
-     * 1. CONSTANTS, CURRENCIES, CATEGORIES & PRESETS
-     ********************************************************************/
-    const STORAGE_KEY = 'hisabkitab_tracker_v1';
-
-    const CURRENCY_MAP = {
-      PKR: { symbol: 'Rs.', code: 'PKR', locale: 'en-PK' },
-      USD: { symbol: '$',   code: 'USD', locale: 'en-US' },
-      GBP: { symbol: '£',   code: 'GBP', locale: 'en-GB' },
-      EUR: { symbol: '€',   code: 'EUR', locale: 'de-DE' },
-      AED: { symbol: 'AED', code: 'AED', locale: 'en-AE' }
-    };
-
-    const DEFAULT_CATEGORIES = [
-      { id: 'groceries',     name: 'Groceries & Food',       type: 'expense', icon: 'ph-shopping-cart',       color: '#10b981' },
-      { id: 'fuel',          name: 'Fuel & Transport',       type: 'expense', icon: 'ph-gas-pump',            color: '#f59e0b' },
-      { id: 'utilities',     name: 'Utilities & Internet',   type: 'expense', icon: 'ph-wifi-high',           color: '#3b82f6' },
-      { id: 'ai_subs',       name: 'AI & Software Subs',     type: 'expense', icon: 'ph-robot',               color: '#8b5cf6' },
-      { id: 'dining',        name: 'Dining Out & Tea',       type: 'expense', icon: 'ph-coffee',              color: '#f97316' },
-      { id: 'medical',       name: 'Medical & Health',       type: 'expense', icon: 'ph-first-aid-kit',       color: '#ef4444' },
-      { id: 'home',          name: 'Home & Maintenance',     type: 'expense', icon: 'ph-house-line',          color: '#14b8a6' },
-      { id: 'shopping',      name: 'Shopping & Personal',    type: 'expense', icon: 'ph-shopping-bag',        color: '#ec4899' },
-      { id: 'salary',        name: 'Salary & Income',        type: 'income',  icon: 'ph-money',               color: '#22c55e' }
+  "use strict";
+  const STORAGE_KEY = "hisabkitab_tracker_v1";
+  const CURRENCY_MAP = {
+    PKR:{symbol:"Rs.",code:"PKR"}, USD:{symbol:"$",code:"USD"},
+    GBP:{symbol:"£",code:"GBP"}, EUR:{symbol:"€",code:"EUR"}, AED:{symbol:"AED",code:"AED"}
+  };
+  const DEFAULT_CATEGORIES = [
+    {id:"groceries",name:"Groceries & Food",type:"expense",icon:"ph-shopping-cart",color:"#10b981"},
+    {id:"fuel",name:"Fuel & Transport",type:"expense",icon:"ph-gas-pump",color:"#f59e0b"},
+    {id:"utilities",name:"Utilities & Internet",type:"expense",icon:"ph-wifi-high",color:"#3b82f6"},
+    {id:"ai_subs",name:"AI & Software Subs",type:"expense",icon:"ph-robot",color:"#8b5cf6"},
+    {id:"dining",name:"Dining Out & Tea",type:"expense",icon:"ph-coffee",color:"#f97316"},
+    {id:"medical",name:"Medical & Health",type:"expense",icon:"ph-first-aid-kit",color:"#ef4444"},
+    {id:"home",name:"Home & Maintenance",type:"expense",icon:"ph-house-line",color:"#14b8a6"},
+    {id:"shopping",name:"Shopping & Personal",type:"expense",icon:"ph-shopping-bag",color:"#ec4899"},
+    {id:"salary",name:"Salary & Income",type:"income",icon:"ph-money",color:"#22c55e"}
+  ];
+  const PAYMENT_METHODS = [
+    {id:"Cash",label:"Cash",icon:"ph-money"},{id:"EasyPaisa",label:"EasyPaisa/Jazz",icon:"ph-device-mobile"},
+    {id:"Bank",label:"Bank Transfer",icon:"ph-bank"},{id:"Card",label:"Debit/Credit",icon:"ph-credit-card"}
+  ];
+  const QUICK_PRESETS = [
+    {title:"Chai & Snacks",amount:250,category:"dining",method:"Cash",icon:"ph-coffee"},
+    {title:"Bike / Car Fuel",amount:1500,category:"fuel",method:"Cash",icon:"ph-gas-pump"},
+    {title:"Daily Milk & Bread",amount:480,category:"groceries",method:"Cash",icon:"ph-shopping-cart"},
+    {title:"Mobile Data Package",amount:1200,category:"utilities",method:"EasyPaisa",icon:"ph-device-mobile"},
+    {title:"Lunch / Biryani",amount:650,category:"dining",method:"EasyPaisa",icon:"ph-bowl-food"},
+    {title:"Veg & Fruits Market",amount:1100,category:"groceries",method:"Cash",icon:"ph-carrot"}
+  ];
+  const NOTE_COLOR_THEMES = {
+    rose:{badge:"bg-rose-500 text-white",border:"border-rose-200",bg:"from-rose-50 to-pink-50"},
+    amber:{badge:"bg-amber-500 text-white",border:"border-amber-200",bg:"from-amber-50 to-orange-50"},
+    emerald:{badge:"bg-emerald-500 text-white",border:"border-emerald-200",bg:"from-emerald-50 to-teal-50"},
+    violet:{badge:"bg-indigo-500 text-white",border:"border-indigo-200",bg:"from-indigo-50 to-violet-50"},
+    cyan:{badge:"bg-sky-500 text-white",border:"border-sky-200",bg:"from-sky-50 to-cyan-50"}
+  };
+  let state = {
+    currency:"PKR", monthlyBudget:85000, theme:"light", activeTab:"dashboard",
+    filterPeriod:"all", analyticsScope:"month", formType:"expense",
+    selectedCategory:"groceries", selectedPayment:"Cash", selectedNoteColor:"rose",
+    customCategories:[], transactions:[], notes:[]
+  };
+  const $ = id => document.getElementById(id);
+  const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const todayISO = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+  const monthKey = date => String(date || "").slice(0,7);
+  const allCategories = () => [...DEFAULT_CATEGORIES,...(state.customCategories||[])];
+  const categoryById = id => allCategories().find(c=>c.id===id) || {id,name:"Other",type:"expense",color:"#64748b",icon:"ph-tag"};
+  function formatMoney(value) {
+    const cfg=CURRENCY_MAP[state.currency]||CURRENCY_MAP.PKR;
+    const amount=Number(value)||0;
+    try { return `${cfg.symbol} ${new Intl.NumberFormat("en-US",{maximumFractionDigits:2}).format(amount)}`; }
+    catch { return `${cfg.symbol} ${amount.toFixed(2)}`; }
+  }
+  function notify(message) {
+    const host=$("toast-container"); if(!host){alert(message);return;}
+    const node=document.createElement("div");
+    node.className="pointer-events-auto rounded-xl bg-slate-900 text-white px-4 py-3 text-sm shadow-xl";
+    node.textContent=message; host.appendChild(node); setTimeout(()=>node.remove(),2600);
+  }
+  function createSampleTransactions() {
+    const d=new Date(); const date=todayISO();
+    return [
+      {id:cryptoId(),title:"Daily groceries",amount:1850,type:"expense",category:"groceries",method:"Cash",date,note:"Sample entry"},
+      {id:cryptoId(),title:"Monthly salary",amount:65000,type:"income",category:"salary",method:"Bank",date,note:"Sample entry"},
+      {id:cryptoId(),title:"Fuel",amount:2200,type:"expense",category:"fuel",method:"Cash",date,note:"Sample entry"}
     ];
-
-    const PAYMENT_METHODS = [
-      { id: 'Cash',         label: 'Cash',            icon: 'ph-money' },
-      { id: 'EasyPaisa',    label: 'EasyPaisa/Jazz',  icon: 'ph-device-mobile-camera' },
-      { id: 'Bank',         label: 'Bank Transfer',   icon: 'ph-bank' },
-      { id: 'Card',         label: 'Debit/Credit',    icon: 'ph-credit-card' }
-    ];
-
-    const QUICK_PRESETS = [
-      { title: 'Chai & Snacks',       amount: 250,  category: 'dining',    method: 'Cash',      icon: 'ph-coffee' },
-      { title: 'Bike / Car Fuel',     amount: 1500, category: 'fuel',      method: 'Cash',      icon: 'ph-gas-pump' },
-      { title: 'Daily Milk & Bread',  amount: 480,  category: 'groceries', method: 'Cash',      icon: 'ph-shopping-cart' },
-      { title: 'Mobile Data Package', amount: 1200, category: 'utilities', method: 'EasyPaisa', icon: 'ph-device-mobile' },
-      { title: 'Lunch / Biryani',     amount: 650,  category: 'dining',    method: 'EasyPaisa', icon: 'ph-bowl-food' },
-      { title: 'Veg & Fruits Market', amount: 1100, category: 'groceries', method: 'Cash',      icon: 'ph-carrot' }
-    ];
-
-    /********************************************************************
-     * 2. STATE MANAGEMENT & LOCAL STORAGE
-     ********************************************************************/
-    let state = {
-      currency: 'PKR',
-      monthlyBudget: 85000,
-      theme: 'light',
-      activeTab: 'dashboard',
-      filterPeriod: 'all',
-      analyticsScope: 'month',
-      formType: 'expense',
-      selectedCategory: 'groceries',
-      selectedPayment: 'Cash',
-      selectedNoteColor: 'rose',
-      customCategories: [],
-      transactions: [],
-      notes: []
-    };
-
-    const NOTE_COLOR_THEMES = {
-      rose:    { badge: 'bg-rose-500 text-white',    border: 'border-rose-200 dark:border-rose-500/30',       bg: 'from-rose-50/90 via-white to-pink-50/60 dark:from-rose-500/10 dark:via-slate-800/90 dark:to-slate-900' },
-      amber:   { badge: 'bg-amber-500 text-white',   border: 'border-amber-200 dark:border-amber-500/30',     bg: 'from-amber-50/90 via-white to-orange-50/60 dark:from-amber-500/10 dark:via-slate-800/90 dark:to-slate-900' },
-      emerald: { badge: 'bg-emerald-500 text-white', border: 'border-emerald-200 dark:border-emerald-500/30', bg: 'from-emerald-50/90 via-white to-teal-50/60 dark:from-emerald-500/10 dark:via-slate-800/90 dark:to-slate-900' },
-      violet:  { badge: 'bg-indigo-500 text-white',  border: 'border-indigo-200 dark:border-indigo-500/30',   bg: 'from-indigo-50/90 via-white to-violet-50/60 dark:from-indigo-500/10 dark:via-slate-800/90 dark:to-slate-900' },
-      cyan:    { badge: 'bg-sky-500 text-white',     border: 'border-sky-200 dark:border-sky-500/30',         bg: 'from-sky-50/90 via-white to-cyan-50/60 dark:from-sky-500/10 dark:via-slate-800/90 dark:to-slate-900' }
-    };
-
-    function createSampleNotes() {
-/* ... existing code ... -->
-    function loadState() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          state = { ...state, ...parsed, theme: 'light' };
-          if (!Array.isArray(state.notes) || state.notes.length === 0) {
-            state.notes = createSampleNotes();
-          }
-        } else {
-          state.transactions = createSampleTransactions();
-          state.notes = createSampleNotes();
-          state.theme = 'light';
-          saveState();
-        }
-      } catch (e) {
-        console.error('Error reading localStorage:', e);
-        state.transactions = createSampleTransactions();
-        state.notes = createSampleNotes();
-        state.theme = 'light';
-      }
-    }
-
-    function saveState() {
-/* ... existing code ... -->
-      tabs.forEach(t => {
-        const sec = document.getElementById(`tab-${t}`);
-        if (sec) sec.classList.toggle('hidden', t !== tabId);
-
-        // Desktop sidebar highlight
-        const deskBtn = document.getElementById(`nav-desk-${t}`);
-        if (deskBtn) {
-          if (t === tabId) {
-            deskBtn.className = 'w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold text-sm bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-500/30 shadow-2xs transition-all';
-          } else {
-            deskBtn.className = 'w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-medium text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 transition-all';
-          }
-        }
-
-        // Mobile bottom bar highlight
-        const mobBtn = document.getElementById(`nav-mob-${t}`);
-        if (mobBtn) {
-          if (t === tabId) {
-            mobBtn.className = 'flex flex-col items-center justify-center py-1 px-3 rounded-xl text-xs font-bold text-sky-600 dark:text-sky-400 transition';
-          } else {
-            mobBtn.className = 'flex flex-col items-center justify-center py-1 px-3 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 transition';
-          }
-        }
-      });
-
-      refreshAllViews();
-    }
-
-    function changeCurrency(newCurr) {
-/* ... existing code ... -->
-      const budgetLeftEl = document.getElementById('kpi-budget-left');
-      budgetLeftEl.textContent = budgetRemaining >= 0 ? formatMoney(budgetRemaining) : `-${formatMoney(Math.abs(budgetRemaining))}`;
-      budgetLeftEl.className = `font-mono font-extrabold text-lg sm:text-2xl tracking-tight truncate ${
-        budgetRemaining < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'
-      }`;
-      document.getElementById('kpi-budget-limit').textContent = `of ${formatMoney(budgetLimit)} limit`;
-
-      // Update Interactive Budget Progress Bar & Color Warnings
-/* ... existing code ... -->
-      chartEl.innerHTML = days.map(d => {
-        const heightPct = d.sum > 0 ? Math.max(10, Math.round((d.sum / maxVal) * 100)) : 4;
-        const barColor = d.isToday
-          ? 'bg-gradient-to-t from-sky-600 to-indigo-500 shadow-sm shadow-sky-500/20'
-          : d.sum > 0
-            ? 'bg-gradient-to-t from-sky-400/75 to-indigo-400/75 hover:from-sky-500 hover:to-indigo-500'
-            : 'bg-slate-200/80 dark:bg-slate-800/70';
-
-        return `
-          <div class="flex-1 flex flex-col items-center h-full justify-end group relative">
-            <!-- Tooltip on Hover -->
-            <div class="opacity-0 group-hover:opacity-100 transition pointer-events-none absolute -top-6 bg-slate-800 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-md shadow-md whitespace-nowrap z-10">
-              ${formatMoney(d.sum)}
-            </div>
-            <div class="w-full max-w-[34px] rounded-t-xl transition-all duration-500 ${barColor}" style="height: ${heightPct}%"></div>
-            <span class="text-[10px] font-semibold mt-2 ${d.isToday ? 'text-sky-600 dark:text-sky-400 font-bold' : 'text-slate-500 dark:text-slate-400'}">${d.label}</span>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function renderTopCategoriesMini(expenseList, totalSpend) {
-/* ... existing code ... -->
+  }
+  function createSampleNotes(){return [{id:cryptoId(),title:"Monthly Shopping",content:"Milk, bread, vegetables, fruit",color:"amber",pinned:true,updatedAt:new Date().toISOString()}];}
+  function cryptoId(){return (window.crypto&&crypto.randomUUID)?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2,10)}`;}
+  function loadState(){
+    try {
+      const raw=localStorage.getItem(STORAGE_KEY);
+      if(raw){const parsed=JSON.parse(raw); state={...state,...parsed};}
+      else {state.transactions=createSampleTransactions();state.notes=createSampleNotes();}
+    } catch(e){console.warn("Could not load saved data",e);state.transactions=[];state.notes=[];}
+    if(!Array.isArray(state.transactions))state.transactions=[];
+    if(!Array.isArray(state.notes))state.notes=[];
+    if(!Array.isArray(state.customCategories))state.customCategories=[];
+    if(!CURRENCY_MAP[state.currency])state.currency="PKR";
+    if(!Number.isFinite(Number(state.monthlyBudget))||Number(state.monthlyBudget)<=0)state.monthlyBudget=85000;
+    applyTheme(); saveState();
+  }
+  function saveState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state));}catch(e){console.warn("Save failed",e);notify("Data save nahi ho saka. Browser storage check karein.");}}
+  function applyTheme(){
+    document.documentElement.classList.toggle("dark",state.theme==="dark");
+    const icon=$("theme-icon"); if(icon)icon.className=`ph-bold ${state.theme==="dark"?"ph-sun":"ph-moon"} text-lg`;
+  }
+  function toggleTheme(){state.theme=state.theme==="dark"?"light":"dark";applyTheme();saveState();}
+  function switchTab(tabId){
+    state.activeTab=tabId;
+    ["dashboard","transactions","analytics","notepad","settings"].forEach(t=>{
+      const section=$(`tab-${t}`);if(section)section.classList.toggle("hidden",t!==tabId);
+      const d=$(`nav-desk-${t}`),m=$(`nav-mob-${t}`);
+      if(d){d.classList.toggle("bg-sky-50",t===tabId);d.classList.toggle("text-sky-700",t===tabId);d.classList.toggle("font-bold",t===tabId);}
+      if(m){m.classList.toggle("text-sky-600",t===tabId);m.classList.toggle("font-bold",t===tabId);}
+    });
+    const titles={dashboard:"Dashboard",transactions:"Transactions History",analytics:"Visual Analytics",notepad:"Hisab Notepad",settings:"Budget & Settings"};
+    if($("header-title"))$("header-title").textContent=titles[tabId]||"HisabKitab";
+    saveState();refreshAllViews();
+  }
+  function changeCurrency(curr){
+    if(!CURRENCY_MAP[curr])return;state.currency=curr;
+    if($("currency-selector"))$("currency-selector").value=curr;
+    if($("modal-currency-label"))$("modal-currency-label").textContent=CURRENCY_MAP[curr].symbol;
+    saveState();refreshAllViews();
+  }
+  function getMonthTransactions(){const m=todayISO().slice(0,7);return state.transactions.filter(t=>monthKey(t.date)===m);}
+  function sum(items,type){return items.filter(t=>!type||t.type===type).reduce((a,t)=>a+(Number(t.amount)||0),0);}
+  function setText(id,value){const el=$(id);if(el)el.textContent=value;}
+  function refreshAllViews(){
+    const now=new Date();
+    setText("current-date-display",now.toLocaleDateString("en-PK",{weekday:"short",year:"numeric",month:"short",day:"numeric"}));
+    const tx=state.transactions, month=getMonthTransactions(), today=tx.filter(t=>t.date===todayISO());
+    const expenses=sum(tx,"expense"), incomes=sum(tx,"income"), monthExp=sum(month,"expense"),monthInc=sum(month,"income"),todayExp=sum(today,"expense");
+    setText("kpi-today-spend",formatMoney(todayExp));setText("kpi-today-count",`${today.filter(t=>t.type==="expense").length} expenses today`);
+    setText("kpi-month-spend",formatMoney(monthExp));setText("kpi-daily-avg",`Daily avg: ${formatMoney(monthExp/Math.max(1,now.getDate()))}`);
+    setText("kpi-month-income",formatMoney(monthInc));setText("kpi-net-savings",`Net Flow: ${formatMoney(monthInc-monthExp)}`);
+    const left=Number(state.monthlyBudget)-monthExp;setText("kpi-budget-left",formatMoney(left));setText("kpi-budget-limit",`of ${formatMoney(state.monthlyBudget)} limit`);
+    const pct=state.monthlyBudget>0?Math.min(100,monthExp/state.monthlyBudget*100):0;
+    setText("budget-ratio-text",`${Math.round(monthExp/state.monthlyBudget*100)}% used`);
+    setText("budget-status-badge",monthExp>state.monthlyBudget?"Over Budget":pct>=80?"Approaching Limit":"Safe Track");
+    setText("budget-warning-msg",monthExp>state.monthlyBudget?"You have exceeded your monthly spending limit.":pct>=80?"You are getting close to your monthly limit.":"You are well within your monthly spending limit.");
+    setText("budget-safe-daily",`Safe daily spend: ${formatMoney(Math.max(0,left)/Math.max(1,new Date(now.getFullYear(),now.getMonth()+1,0).getDate()-now.getDate()+1))}/day`);
+    ["main-budget-bar","sidebar-budget-bar"].forEach(id=>{if($(id))$(id).style.width=`${pct}%`;});
+    setText("sidebar-budget-pct",`${Math.round(monthExp/state.monthlyBudget*100)}%`);setText("sidebar-budget-text",`${formatMoney(Math.max(0,left))} left this month`);
+    setText("sidebar-tx-count",String(tx.length));setText("sidebar-notes-count",String(state.notes.length));
+    if($("settings-budget-input"))$("settings-budget-input").value=state.monthlyBudget;
+    if($("currency-selector"))$("currency-selector").value=state.currency;
+    renderPresets();renderSevenDayChart();renderTopCategoriesMini(month.filter(t=>t.type==="expense"),monthExp);
+    renderRecent();renderTransactionsTab();renderAnalytics();renderNotepadTab();renderCategoriesSettings();renderModalChoices();updatePrintSummary();
+  }
+  function renderPresets(){
+    const host=$("quick-presets-container");if(!host)return;
+    host.innerHTML=QUICK_PRESETS.map((p,i)=>`<button onclick="addPreset(${i})" class="shrink-0 px-3 py-2 rounded-xl bg-white/80 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-left hover:border-sky-400"><span class="block text-xs font-bold">${esc(p.title)}</span><span class="block text-[11px] text-slate-500">${formatMoney(p.amount)}</span></button>`).join("");
+  }
+  function addPreset(i){const p=QUICK_PRESETS[i];if(!p)return;state.transactions.push({id:cryptoId(),...p,type:"expense",date:todayISO(),note:"Quick preset"});saveState();refreshAllViews();notify("Expense added");}
+  function renderSevenDayChart(){
+    const host=$("seven-day-chart");if(!host)return;const days=[];
+    for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const iso=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;days.push({iso,label:d.toLocaleDateString("en",{weekday:"short"}),sum:sum(state.transactions.filter(t=>t.date===iso),"expense"),isToday:i===0});}
+    const max=Math.max(1,...days.map(d=>d.sum));setText("seven-day-total",formatMoney(days.reduce((a,d)=>a+d.sum,0)));
+    host.innerHTML=days.map(d=>`<div class="flex-1 flex flex-col items-center h-full justify-end gap-1"><div title="${esc(formatMoney(d.sum))}" class="w-full max-w-[34px] rounded-t-lg ${d.isToday?"bg-sky-600":"bg-indigo-400"}" style="height:${d.sum?Math.max(8,d.sum/max*100):3}%"></div><span class="text-[10px]">${d.label}</span></div>`).join("");
+  }
+  function renderTopCategoriesMini(list,total){
+    const host=$("dashboard-top-categories");if(!host)return;const sums={};
+    list.forEach(t=>sums[t.category]=(sums[t.category]||0)+Number(t.amount||0));
+    const rows=Object.entries(sums).sort((a,b)=>b[1]-a[1]).slice(0,5);
+    host.innerHTML=rows.length?rows.map(([id,n])=>`<div><div class="flex justify-between gap-2 text-xs mb-1"><span>${esc(categoryById(id).name)}</span><strong>${formatMoney(n)}</strong></div><div class="h-2 bg-slate-100 dark:bg-slate-800 rounded-full"><div class="h-2 bg-indigo-500 rounded-full" style="width:${total?Math.min(100,n/total*100):0}%"></div></div></div>`).join(""):'<p class="text-xs text-slate-400">No expenses recorded yet.</p>';
+  }
+  function renderRecent(){
+    const host=$("dashboard-recent-list");if(!host)return;const rows=[...state.transactions].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,5);
+    host.innerHTML=rows.length?rows.map(t=>txRow(t,false)).join(""):'<p class="py-6 text-center text-sm text-slate-400">No transactions yet. Add your first entry.</p>';
+  }
+  function txRow(t,actions=true){
+    const cat=categoryById(t.category),positive=t.type==="income";
+    return `<div class="flex items-center gap-3 py-3"><div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background:${cat.color}22;color:${cat.color}"><i class="ph ${esc(cat.icon||"ph-tag")}"></i></div><div class="min-w-0 flex-1"><p class="text-sm font-semibold truncate">${esc(t.title)}</p><p class="text-[11px] text-slate-500">${esc(cat.name)} · ${esc(t.date||"")} · ${esc(t.method||"Cash")}</p></div><div class="text-right"><p class="text-sm font-mono font-bold ${positive?"text-emerald-500":"text-rose-500"}">${positive?"+":"−"}${formatMoney(t.amount)}</p>${actions?`<div class="flex gap-2 justify-end text-[11px]"><button class="text-sky-600" onclick="editTransaction('${t.id}')">Edit</button><button class="text-rose-500" onclick="deleteTransaction('${t.id}')">Delete</button></div>`:""}</div></div>`;
+  }
+  function setFilterPeriod(p){state.filterPeriod=p;renderTransactionsTab();}
+  function renderTransactionsTab(){
+    const host=$("full-transactions-list");if(!host)return;
+    const search=($("filter-search")?.value||"").toLowerCase(),cat=$("filter-category")?.value||"ALL",type=$("filter-type")?.value||"ALL",now=new Date();
+    let list=[...state.transactions];
+    if(state.filterPeriod==="today")list=list.filter(t=>t.date===todayISO());
+    if(state.filterPeriod==="week"){const from=new Date();from.setDate(from.getDate()-6);const min=`${from.getFullYear()}-${String(from.getMonth()+1).padStart(2,"0")}-${String(from.getDate()).padStart(2,"0")}`;list=list.filter(t=>t.date>=min&&t.date<=todayISO());}
+    if(state.filterPeriod==="month")list=list.filter(t=>monthKey(t.date)===todayISO().slice(0,7));
+    if(cat!=="ALL")list=list.filter(t=>t.category===cat);if(type!=="ALL")list=list.filter(t=>t.type===type);
+    if(search)list=list.filter(t=>`${t.title} ${t.note||""} ${t.method||""}`.toLowerCase().includes(search));
+    list.sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+    host.innerHTML=list.length?list.map(t=>txRow(t,true)).join(""):'<p class="p-8 text-center text-sm text-slate-400">No matching transactions found.</p>';
+    setText("filtered-count-label",`Showing ${list.length} transactions`);setText("filtered-expense-sum",formatMoney(sum(list,"expense")));setText("filtered-income-sum",formatMoney(sum(list,"income")));
+    const select=$("filter-category");if(select&&select.options.length!==allCategories().length+1){const old=select.value;select.innerHTML='<option value="ALL">All Categories</option>'+allCategories().map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");select.value=old||"ALL";}
+    document.querySelectorAll(".filter-period-btn").forEach(b=>{const active=b.dataset.period===state.filterPeriod;b.classList.toggle("bg-white",active);b.classList.toggle("dark:bg-slate-700",active);});
+  }
+  function openTransactionModal(id=null){
+    const modal=$("transaction-modal");if(!modal)return;
+    $("tx-form").reset();$("tx-edit-id").value="";$("tx-date").value=todayISO();$("tx-modal-title").textContent=id?"Edit Transaction":"Add Transaction";$("tx-submit-label").textContent=id?"Update Transaction":"Save Transaction";
+    if(id){const t=state.transactions.find(x=>x.id===id);if(!t)return;$("tx-edit-id").value=t.id;$("tx-amount").value=t.amount;$("tx-date").value=t.date;$("tx-title").value=t.title;$("tx-note")&&($("tx-note").value=t.note||"");state.formType=t.type;state.selectedCategory=t.category;state.selectedPayment=t.method||"Cash";}
+    else {state.formType="expense";state.selectedCategory="groceries";state.selectedPayment="Cash";}
+    renderModalChoices();setFormType(state.formType);modal.classList.remove("hidden");modal.classList.add("flex");
+  }
+  function closeTransactionModal(){const m=$("transaction-modal");if(m){m.classList.add("hidden");m.classList.remove("flex");}}
+  function setFormType(type){state.formType=type;["expense","income"].forEach(t=>{const b=$(`type-btn-${t}`);if(b)b.className=`py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition ${type===t?(t==="expense"?"bg-rose-500 text-white":"bg-emerald-500 text-white"):"text-slate-500"}`;});renderModalChoices();}
+  function renderModalChoices(){
+    const catHost=$("modal-category-grid");if(catHost){const cats=allCategories().filter(c=>c.type===state.formType);if(!cats.some(c=>c.id===state.selectedCategory))state.selectedCategory=cats[0]?.id||"";catHost.innerHTML=cats.map(c=>`<button type="button" onclick="selectCategory('${c.id}')" class="p-2 rounded-xl border text-xs font-semibold ${state.selectedCategory===c.id?"border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10":"border-slate-200 dark:border-slate-700"}"><span class="block mb-1" style="color:${c.color}"><i class="ph ${esc(c.icon||"ph-tag")}"></i></span>${esc(c.name)}</button>`).join("");}
+    const payHost=$("modal-payment-grid");if(payHost)payHost.innerHTML=PAYMENT_METHODS.map(p=>`<button type="button" onclick="selectPayment('${p.id}')" class="px-2 py-2 rounded-xl border text-xs ${state.selectedPayment===p.id?"border-sky-500 bg-sky-50 dark:bg-sky-500/10":"border-slate-200 dark:border-slate-700"}">${esc(p.label)}</button>`).join("");
+    setText("modal-currency-label",(CURRENCY_MAP[state.currency]||CURRENCY_MAP.PKR).symbol);
+  }
+  function selectCategory(id){state.selectedCategory=id;renderModalChoices();}
+  function selectPayment(id){state.selectedPayment=id;renderModalChoices();}
+  function handleSaveTransaction(event){
+    event.preventDefault();const amount=Number($("tx-amount").value),title=$("tx-title").value.trim(),date=$("tx-date").value;
+    if(!(amount>0)||!title||!date){notify("Amount, title aur date check karein.");return;}
+    const id=$("tx-edit-id").value;const record={id:id||cryptoId(),title,amount,type:state.formType,category:state.selectedCategory,method:state.selectedPayment,date,note:$("tx-note")?.value||""};
+    if(id){const i=state.transactions.findIndex(t=>t.id===id);if(i>=0)state.transactions[i]=record;}else state.transactions.push(record);
+    saveState();closeTransactionModal();refreshAllViews();notify(id?"Transaction updated":"Transaction saved");
+  }
+  function editTransaction(id){openTransactionModal(id);}
+  function deleteTransaction(id){if(!confirm("Is transaction ko delete karna hai?"))return;state.transactions=state.transactions.filter(t=>t.id!==id);saveState();refreshAllViews();notify("Transaction deleted");}
+  function openBudgetEditPrompt(){if($("modal-budget-input"))$("modal-budget-input").value=state.monthlyBudget;showModal("budget-modal");}
+  function closeBudgetPrompt(){hideModal("budget-modal");}
+  function saveBudgetFromModal(){const v=Number($("modal-budget-input").value);if(!(v>0)){notify("Budget zero se zyada hona chahiye.");return;}state.monthlyBudget=v;saveState();hideModal("budget-modal");refreshAllViews();notify("Monthly budget updated");}
+  function saveBudgetFromSettings(){const v=Number($("settings-budget-input").value);if(!(v>0)){notify("Budget zero se zyada hona chahiye.");return;}state.monthlyBudget=v;saveState();refreshAllViews();notify("Budget saved");}
+  function showModal(id){const m=$(id);if(m){m.classList.remove("hidden");m.classList.add("flex");}}
+  function hideModal(id){const m=$(id);if(m){m.classList.add("hidden");m.classList.remove("flex");}}
+  function openClearDataConfirm(){showModal("confirm-clear-modal");}
+  function closeClearDataConfirm(){hideModal("confirm-clear-modal");}
+  function confirmClearAllData(){state.transactions=[];saveState();closeClearDataConfirm();refreshAllViews();notify("All transactions cleared");}
+  function restoreDemoData(){if(!confirm("Sample transactions load karein?"))return;state.transactions=createSampleTransactions();state.notes=createSampleNotes();saveState();refreshAllViews();notify("Sample data loaded");}
+  function exportTransactionsCSV(){
+    const rows=[["Date","Type","Title","Category","Amount","Currency","Payment Method","Note"],...state.transactions.map(t=>[t.date,t.type,t.title,categoryById(t.category).name,t.amount,state.currency,t.method,t.note||""])];
+    const csv=rows.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
+    const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"}),url=URL.createObjectURL(blob),a=document.createElement("a");
+    a.href=url;a.download=`hisabkitab-transactions-${todayISO()}.csv`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);notify("CSV export ready");
+  }
+  function setAnalyticsScope(scope){state.analyticsScope=scope;renderAnalytics();}
+  function renderAnalytics(){
+    const tx=state.analyticsScope==="all"?state.transactions:getMonthTransactions(),expenses=tx.filter(t=>t.type==="expense"),total=sum(expenses,"expense"),totals={};
+    expenses.forEach(t=>totals[t.category]=(totals[t.category]||0)+Number(t.amount||0));
+    const rows=Object.entries(totals).sort((a,b)=>b[1]-a[1]),colors=rows.map(([id])=>categoryById(id).color||"#64748b");
+    setText("donut-center-amount",formatMoney(total));setText("donut-center-sub",`${rows.length} categories`);
+    const svg=$("analytics-donut-svg");if(svg){let offset=0;svg.innerHTML=rows.length?rows.map(([id,n],i)=>{const pct=total?n/total*100:0,seg=`<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="${colors[i]}" stroke-width="5" stroke-dasharray="${pct} ${100-pct}" stroke-dashoffset="${-offset}"></circle>`;offset+=pct;return seg;}).join(""):'<circle cx="21" cy="21" r="15.915" fill="none" stroke="#e2e8f0" stroke-width="5"></circle>';}
+    const legend=$("analytics-donut-legend");if(legend)legend.innerHTML=rows.map(([id,n],i)=>`<div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" style="background:${colors[i]}"></span><span class="truncate">${esc(categoryById(id).name)}</span><strong class="ml-auto">${total?Math.round(n/total*100):0}%</strong></div>`).join("")||'<p class="text-slate-400">No expense data yet.</p>';
+    const bars=$("analytics-category-bars");if(bars)bars.innerHTML=rows.map(([id,n],i)=>`<div><div class="flex justify-between text-xs mb-1"><span>${esc(categoryById(id).name)}</span><strong>${formatMoney(n)} · ${total?Math.round(n/total*100):0}%</strong></div><div class="h-2 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-2 rounded-full" style="width:${total?n/total*100:0}%;background:${colors[i]}"></div></div></div>`).join("")||'<p class="text-slate-400 text-sm">No expense data yet.</p>';
+    const pays=$("analytics-payment-cards");if(pays){const sums={};expenses.forEach(t=>sums[t.method||"Cash"]=(sums[t.method||"Cash"]||0)+Number(t.amount||0));pays.innerHTML=PAYMENT_METHODS.map(p=>`<div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60"><p class="text-xs text-slate-500">${esc(p.label)}</p><strong class="text-sm">${formatMoney(sums[p.id]||0)}</strong></div>`).join("");}
+    $("ana-scope-month")?.classList.toggle("opacity-50",state.analyticsScope!=="month");$("ana-scope-all")?.classList.toggle("opacity-50",state.analyticsScope!=="all");
+  }
+  function handleAddCustomCategory(event){
+    event.preventDefault();const name=$("custom-cat-name").value.trim(),type=$("custom-cat-type").value,color=$("custom-cat-color").value;
+    if(!name)return;if(allCategories().some(c=>c.name.toLowerCase()===name.toLowerCase())){notify("Ye category pehle se mojood hai.");return;}
+    state.customCategories.push({id:`custom-${cryptoId()}`,name,type,color,icon:"ph-tag"});$("custom-cat-name").value="";saveState();refreshAllViews();notify("Category created");
+  }
+  function renderCategoriesSettings(){
+    const host=$("settings-categories-list");if(host)host.innerHTML=allCategories().map(c=>`<span class="px-2.5 py-1 rounded-full text-xs border border-slate-200 dark:border-slate-700" style="color:${c.color}">${esc(c.name)}${c.id.startsWith("custom-")?` <button onclick="deleteCustomCategory('${c.id}')" aria-label="Delete category">×</button>`:""}</span>`).join("");
+  }
+  function deleteCustomCategory(id){if(state.transactions.some(t=>t.category===id)){notify("Is category se transactions linked hain; pehle unhein edit karein.");return;}state.customCategories=state.customCategories.filter(c=>c.id!==id);saveState();refreshAllViews();}
+  function selectNoteColor(color){state.selectedNoteColor=NOTE_COLOR_THEMES[color]?color:"rose";document.querySelectorAll("[data-ncolor]").forEach(b=>b.classList.toggle("ring-2",b.dataset.ncolor===state.selectedNoteColor));}
+  function handleSaveNote(event){
+    event.preventDefault();const title=$("note-title").value.trim(),content=$("note-content").value.trim(),id=$("note-edit-id").value;
+    if(!title||!content)return;const note={id:id||cryptoId(),title,content,color:state.selectedNoteColor,pinned:$("note-pinned").checked,updatedAt:new Date().toISOString()};
+    if(id){const i=state.notes.findIndex(n=>n.id===id);if(i>=0)state.notes[i]=note;}else state.notes.push(note);
+    saveState();resetNoteForm();renderNotepadTab();setText("sidebar-notes-count",String(state.notes.length));notify("Note saved");
+  }
+  function resetNoteForm(){if($("notepad-form"))$("notepad-form").reset();$("note-edit-id").value="";$("note-cancel-edit-btn")?.classList.add("hidden");setText("note-submit-label","Save Note");selectNoteColor("rose");}
+  function editNote(id){const n=state.notes.find(x=>x.id===id);if(!n)return;$("note-edit-id").value=n.id;$("note-title").value=n.title;$("note-content").value=n.content;$("note-pinned").checked=!!n.pinned;selectNoteColor(n.color);$("note-cancel-edit-btn")?.classList.remove("hidden");setText("note-submit-label","Update Note");$("note-title").focus();}
+  function deleteNote(id){if(!confirm("Is note ko delete karna hai?"))return;state.notes=state.notes.filter(n=>n.id!==id);saveState();renderNotepadTab();setText("sidebar-notes-count",String(state.notes.length));}
+  function renderNotepadTab(){
+    const host=$("notes-grid-container");if(!host)return;const q=($("note-search-input")?.value||"").toLowerCase();
+    const notes=[...state.notes].filter(n=>`${n.title} ${n.content}`.toLowerCase().includes(q)).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned));
+    host.innerHTML=notes.map(n=>`<article class="p-4 rounded-2xl border ${NOTE_COLOR_THEMES[n.color]?.border||"border-slate-200"} bg-gradient-to-br ${NOTE_COLOR_THEMES[n.color]?.bg||"from-white to-slate-50"} dark:bg-slate-800"><div class="flex justify-between gap-2"><h4 class="font-bold text-sm">${esc(n.title)}</h4>${n.pinned?'<span title="Pinned">📌</span>':""}</div><p class="text-xs whitespace-pre-wrap mt-3">${esc(n.content)}</p><div class="flex gap-3 mt-4 text-xs"><button class="text-sky-600" onclick="editNote('${n.id}')">Edit</button><button class="text-rose-500" onclick="deleteNote('${n.id}')">Delete</button></div></article>`).join("")||'<p class="text-sm text-slate-400">No saved notes.</p>';
+  }
+  function openSummaryModal(){updatePrintSummary();showModal("summary-modal");}
+  function closeSummaryModal(){hideModal("summary-modal");}
+  function updatePrintSummary(){
+    const tx=getMonthTransactions(),inc=sum(tx,"income"),exp=sum(tx,"expense");
+    setText("print-period-subtitle",`Statement Period: ${new Date().toLocaleDateString("en",{month:"long",year:"numeric"})}`);
+    setText("print-generated-date",`Generated: ${new Date().toLocaleString()}`);setText("print-income",formatMoney(inc));setText("print-expense",formatMoney(exp));setText("print-budget",formatMoney(state.monthlyBudget));setText("print-balance",formatMoney(inc-exp));
+    const rows={};tx.filter(t=>t.type==="expense").forEach(t=>{if(!rows[t.category])rows[t.category]={count:0,total:0};rows[t.category].count++;rows[t.category].total+=Number(t.amount||0);});
+    const total=sum(tx,"expense"),host=$("print-category-rows");if(host)host.innerHTML=Object.entries(rows).sort((a,b)=>b[1].total-a[1].total).map(([id,r])=>`<tr><td class="py-2">${esc(categoryById(id).name)}</td><td class="py-2 text-right">${r.count}</td><td class="py-2 text-right">${total?Math.round(r.total/total*100):0}%</td><td class="py-2 text-right">${formatMoney(r.total)}</td></tr>`).join("");
+  }
+  async function copySummaryToClipboard(){
+    const text=`HisabKitab Monthly Statement\nIncome: ${$("print-income")?.textContent||""}\nExpenses: ${$("print-expense")?.textContent||""}\nBudget: ${$("print-budget")?.textContent||""}\nBalance: ${$("print-balance")?.textContent||""}`;
+    try{await navigator.clipboard.writeText(text);notify("Summary copied");}catch{prompt("Copy summary:",text);}
+  }
+  document.addEventListener("DOMContentLoaded",()=>{
+    loadState();if($("currency-selector"))$("currency-selector").value=state.currency;
+    if($("tx-form")&&!$("tx-note")){const field=document.createElement("input");field.type="text";field.id="tx-note";field.placeholder="Optional note";field.className="hidden";$("tx-form").appendChild(field);}
+    switchTab(state.activeTab||"dashboard");refreshAllViews();
+    document.querySelectorAll("[data-period]").forEach(b=>b.classList.toggle("bg-white",b.dataset.period===state.filterPeriod));
+  });
+  </script>
+</body>
+</html>
